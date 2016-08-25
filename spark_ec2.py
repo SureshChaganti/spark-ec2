@@ -331,6 +331,9 @@ def parse_args():
     parser.add_option(
         "--instance-profile-name", default=None,
         help="IAM profile name to launch instances under")
+    parser.add_option(
+        "--proxy_host_port", default=None,
+        help="proxy host to route the out bound calls example git clone from EC2")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -764,7 +767,6 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
     def get_instances(group_names):
         """
         Get all non-terminated instances that belong to any of the provided security groups.
-
         EC2 reservation filters and instance states are documented here:
             http://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instances.html#options
         """
@@ -825,15 +827,15 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
 
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
-    print("Cloning spark-ec2 scripts from {r}/tree/{b} on master...".format(
-        r=opts.spark_ec2_git_repo, b=opts.spark_ec2_git_branch))
+    print("Cloning spark-ec2 scripts from {r}/tree/{b} on master with proxy{proxy}...".format(
+        r=opts.spark_ec2_git_repo, b=opts.spark_ec2_git_branch, proxy=opts.proxy_host_port))
     ssh(
         host=master,
         opts=opts,
         command="rm -rf spark-ec2"
         + " && "
-        + "git clone {r} -b {b} spark-ec2".format(r=opts.spark_ec2_git_repo,
-                                                  b=opts.spark_ec2_git_branch)
+        + "git clone {r} -b {b} spark-ec2 --config http.proxy={proxy}".format(r=opts.spark_ec2_git_repo,
+                                                  b=opts.spark_ec2_git_branch, proxy=opts.proxy_host_port)
     )
 
     print("Deploying files to master...")
@@ -911,7 +913,6 @@ def is_cluster_ssh_available(cluster_instances, opts):
 def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
     """
     Wait for all the instances in the cluster to reach a designated state.
-
     cluster_instances: a list of boto.ec2.instance.Instance
     cluster_state: a string representing the desired state of all the instances in the cluster
            value can be 'ssh-ready' or a valid value from boto.ec2.instance.InstanceState such as
